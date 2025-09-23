@@ -61,3 +61,11 @@ def saudacao(nome):
 saudacao("Maria")
 saudacao("Marta")
 saudacao("João")
+
+
+
+x=10,y=20;print(x+y)
+
+def soma(a, b):
+    return a + b
+print(soma(10, 20))
