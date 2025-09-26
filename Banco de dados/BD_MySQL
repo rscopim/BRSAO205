@@ -1,0 +1,258 @@
+-- 1) Criar o banco (se necessário) e usar
+-- Explicação: cria a base de dados `lab` se ela ainda não existir e define conjunto de caracteres
+-- (utf8mb4) e collation (utf8mb4_unicode_ci) adequados para suportar emoji e caracteres multi-byte.
+CREATE DATABASE IF NOT EXISTS lab CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Explicação: seleciona (usa) o banco de dados `lab` para que comandos seguintes afetem esse banco.
+USE lab;
+
+
+-- 2) Tabelas
+
+-- Tabela `alunos`: armazena informações dos alunos
+-- Cada linha comentada abaixo explica a finalidade de cada coluna/definição.
+CREATE TABLE alunos (
+  -- Identificador numérico do aluno; UNSIGNED evita valores negativos.
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  -- Nome do aluno, até 150 caracteres, não pode ser nulo.
+  nome VARCHAR(150) NOT NULL,
+  -- Data de nascimento, pode ser NULL caso não seja informada.
+  data_nascimento DATE NULL,
+  -- Email do aluno; campo único para evitar cadastros duplicados.
+  email VARCHAR(200) UNIQUE,
+  -- Timestamp de criação do registro; padrão = data/hora atual quando inserir.
+  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- Define a chave primária da tabela (índice clustered em InnoDB).
+  PRIMARY KEY (id)
+) ENGINE=InnoDB;
+
+
+-- Tabela `disciplinas`: cadastro das disciplinas/ofertas
+CREATE TABLE disciplinas (
+  -- Identificador da disciplina
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  -- Código da disciplina (ex: MAT101)
+  codigo VARCHAR(20) NOT NULL,
+  -- Nome descritivo da disciplina
+  nome VARCHAR(150) NOT NULL,
+  -- Carga horária em horas (valor inteiro não negativo)
+  carga_horaria INT UNSIGNED DEFAULT 0,
+  -- Timestamp de criação do registro
+  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- Chave primária
+  PRIMARY KEY (id),
+  -- Índice único para garantir que não existam dois registros com mesmo código
+  UNIQUE KEY ux_disciplina_codigo (codigo)
+) ENGINE=InnoDB;
+
+
+-- Tabela `matriculas`: relaciona alunos <-> disciplinas (N:N resolvido por tabela associativa)
+CREATE TABLE matriculas (
+  -- Identificador da matrícula
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  -- FK para o aluno (referencia alunos.id)
+  aluno_id INT UNSIGNED NOT NULL,
+  -- FK para a disciplina (referencia disciplinas.id)
+  disciplina_id INT UNSIGNED NOT NULL,
+  -- Data da matrícula; por padrão usa a data corrente do servidor (CURDATE())
+  data_matricula DATE DEFAULT CURDATE(),
+  -- Status da matrícula com valores restritos via ENUM
+  status ENUM('matriculado','cancelado','concluido') DEFAULT 'matriculado',
+  -- Chave primária
+  PRIMARY KEY (id),
+  -- Restrição de unicidade: um mesmo aluno não pode se matricular duas vezes na mesma disciplina
+  UNIQUE KEY ux_matricula_aluno_disciplina (aluno_id, disciplina_id),
+  -- Constraint de integridade referencial: ao deletar um aluno, suas matrículas são removidas (CASCADE)
+  CONSTRAINT fk_matricula_aluno FOREIGN KEY (aluno_id) REFERENCES alunos(id) ON DELETE CASCADE,
+  -- Constraint: ao deletar uma disciplina, as matrículas relacionadas são removidas (CASCADE)
+  CONSTRAINT fk_matricula_disciplina FOREIGN KEY (disciplina_id) REFERENCES disciplinas(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+
+-- Tabela `notas`: armazena avaliações vinculadas a uma matrícula específica
+CREATE TABLE notas (
+  -- Identificador da nota
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  -- FK para a matrícula (referencia matriculas.id)
+  matricula_id INT UNSIGNED NOT NULL,
+  -- Tipo da avaliação (enumerações pré-definidas)
+  tipo ENUM('prova','trabalho','av1','av2','recuperacao') DEFAULT 'prova',
+  -- Valor da nota; DECIMAL para preservar casas decimais. CHECK garante 0 <= nota <= 100.
+  nota DECIMAL(5,2) NOT NULL CHECK (nota >= 0 AND nota <= 100),
+  -- Peso da nota na média ponderada (padrão 1.0)
+  peso DECIMAL(5,2) DEFAULT 1.0,
+  -- Data da avaliação; padrão = data atual
+  data_avaliacao DATE DEFAULT CURDATE(),
+  -- Comentário adicional sobre a nota (opcional)
+  comentario VARCHAR(500),
+  -- Chave primária
+  PRIMARY KEY (id),
+  -- Constraint de integridade referencial: se a matrícula for excluída, as notas vinculadas também são.
+  CONSTRAINT fk_nota_matricula FOREIGN KEY (matricula_id) REFERENCES matriculas(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+
+-- 3) Índices úteis
+-- Índices facilitam buscas por colunas frequentemente usadas em JOINs/WHERE
+-- Índice na coluna matricula_id da tabela notas para acelerar consultas que buscam notas por matrícula
+CREATE INDEX idx_notas_matricula ON notas(matricula_id);
+-- Índice na coluna aluno_id da tabela matriculas para acelerar buscas por matrículas de um aluno
+CREATE INDEX idx_matricula_aluno ON matriculas(aluno_id);
+-- Índice na coluna disciplina_id da tabela matriculas para buscas por alunos de uma disciplina
+CREATE INDEX idx_matricula_disciplina ON matriculas(disciplina_id);
+
+
+-- 4) Exemplos de inserts
+-- Inserção de alguns alunos (exemplos)
+INSERT INTO alunos (nome, data_nascimento, email) VALUES
+  ('João Silva', '2005-04-12', 'joao.silva@example.com'),
+  ('Maria Oliveira', '2004-09-20', 'maria.oliveira@example.com'),
+  ('Pedro Costa', '2006-01-05', 'pedro.costa@example.com');
+
+-- Inserção de disciplinas
+INSERT INTO disciplinas (codigo, nome, carga_horaria) VALUES
+  ('MAT101', 'Matemática Básica', 60),
+  ('POR101', 'Português', 45),
+  ('FIS101', 'Física', 60);
+
+-- Observação: os índices/IDs gerados (1,2,3...) dependem do estado atual do banco.
+-- Aqui assumimos que os IDs das tabelas `alunos` e `disciplinas` serão 1,2,3 conforme inserção acima.
+
+-- Matricular alunos nas disciplinas (exemplo). A UNIQUE KEY em matriculas evita duplicidade aluno+disciplina.
+INSERT INTO matriculas (aluno_id, disciplina_id) VALUES
+  (1,1), (1,2), (2,1), (2,2), (3,1), (3,3);
+
+-- Inserção de notas de exemplo. Note que as datas são fixas para exemplificação.
+INSERT INTO notas (matricula_id, tipo, nota, peso, data_avaliacao) VALUES
+  (1, 'av1', 78.50, 1.0, '2025-09-10'),
+  (1, 'av2', 82.00, 1.0, '2025-10-10'),
+  (1, 'trabalho', 90.00, 0.5, '2025-11-01'),
+  (2, 'av1', 65.00, 1.0, '2025-09-10'),
+  (3, 'av1', 88.00, 1.0, '2025-09-10');
+
+
+-- 5) Consultas úteis
+
+-- Média ponderada por matrícula (aluno-disciplina)
+-- Explicação geral: para cada matrícula (linha em `matriculas`) calculamos a média ponderada
+-- das notas associadas (SUM(nota * peso) / SUM(peso)). Usamos LEFT JOIN para não perder
+-- matrículas que ainda não tenham notas (retornariam NULLs nas agregações).
+SELECT
+  -- ID da matrícula (chave da relação aluno-disciplina)
+  m.id AS matricula_id,
+  -- id do aluno para referência
+  m.aluno_id,
+  -- nome do aluno a partir do join com a tabela alunos
+  a.nome AS aluno,
+  -- id da disciplina
+  m.disciplina_id,
+  -- nome da disciplina a partir do join com disciplinas
+  d.nome AS disciplina,
+  -- cálculo da média ponderada: soma(nota * peso) / soma(peso)
+  SUM(n.nota * n.peso) / SUM(n.peso) AS media_ponderada
+FROM matriculas m
+JOIN alunos a ON a.id = m.aluno_id
+JOIN disciplinas d ON d.id = m.disciplina_id
+-- LEFT JOIN porque uma matrícula pode não ter notas ainda; assim a matrícula aparece com média NULL
+LEFT JOIN notas n ON n.matricula_id = m.id
+-- Agrupamos por matrícula (e colunas não agregadas selecionadas)
+GROUP BY m.id, m.aluno_id, a.nome, m.disciplina_id, d.nome;
+
+
+-- Média geral do aluno (todas disciplinas) — média das médias por disciplina
+-- Explicação: primeiro calculamos a média por matrícula (subquery `sub`) e depois fazemos
+-- AVG dessas médias por aluno para obter uma média geral do aluno entre todas as disciplinas.
+SELECT
+  -- id do aluno
+  a.id AS aluno_id,
+  -- nome do aluno
+  a.nome,
+  -- média geral calculada como AVG das médias por matrícula
+  AVG(sub.media_ponderada) AS media_geral
+FROM (
+  -- subquery: média ponderada por matrícula
+  SELECT m.aluno_id,
+         SUM(n.nota * n.peso) / SUM(n.peso) AS media_ponderada
+  FROM matriculas m
+  JOIN notas n ON n.matricula_id = m.id
+  GROUP BY m.id, m.aluno_id
+) sub
+-- juntamos a subquery com a tabela alunos para obter nomes e agrupar por aluno
+JOIN alunos a ON a.id = sub.aluno_id
+GROUP BY a.id, a.nome;
+
+
+-- Boletim do aluno (listar disciplinas e média)
+-- Explicação: para um aluno específico listamos cada disciplina e a média nessa disciplina.
+-- COALESCE(..., 0) garante que, se não houver notas, o valor retorne 0 em vez de NULL.
+-- NULLIF(SUM(n.peso),0) evita divisão por zero quando não houver notas (se SUM(peso)=0 -> NULL).
+SELECT
+  a.id AS aluno_id,
+  a.nome AS aluno,
+  d.codigo,
+  d.nome AS disciplina,
+  -- Se não houver notas, o denominador NULLIF(...) vira NULL e a divisão resulta em NULL;
+  -- COALESCE transforma esse NULL em 0 para mostrar média 0.
+  COALESCE(SUM(n.nota * n.peso) / NULLIF(SUM(n.peso),0), 0) AS media
+FROM alunos a
+JOIN matriculas m ON m.aluno_id = a.id
+JOIN disciplinas d ON d.id = m.disciplina_id
+LEFT JOIN notas n ON n.matricula_id = m.id
+-- Filtra para um aluno específico (troque o 1 para o id desejado)
+WHERE a.id = 1   -- troque para o ID do aluno desejado
+GROUP BY a.id, a.nome, d.codigo, d.nome;
+
+
+-- 6) Exemplo de transação (inserir matrícula + primeira nota)
+-- Explicação: usamos transação para garantir atomicidade: ou ambas as operações ocorrem,
+-- ou nenhuma (em caso de erro fazemos rollback). Em MySQL, LAST_INSERT_ID() retorna o id
+-- gerado pelo AUTO_INCREMENT na sessão atual.
+START TRANSACTION;
+-- Inserimos a matrícula (exemplo: aluno 1 na disciplina 3)
+INSERT INTO matriculas (aluno_id, disciplina_id, data_matricula) VALUES (1, 3, CURDATE());
+-- Capturamos o último id inserido na sessão em uma variável de usuário
+SET @mat_id = LAST_INSERT_ID();
+-- Inserimos a primeira nota usando a matrícula recém-criada
+INSERT INTO notas (matricula_id, tipo, nota, peso) VALUES (@mat_id, 'av1', 85.00, 1.0);
+-- Confirma as alterações
+COMMIT;
+
+
+-- 7) View opcional: média por aluno por disciplina
+-- Explicação: view que encapsula a mesma lógica de média por matrícula para facilitar consultas
+CREATE OR REPLACE VIEW vw_media_por_matricula AS
+SELECT
+  m.id AS matricula_id,
+  m.aluno_id,
+  a.nome AS aluno,
+  m.disciplina_id,
+  d.nome AS disciplina,
+  -- COALESCE para retornar 0 quando não houver notas (em vez de NULL)
+  COALESCE(SUM(n.nota * n.peso) / NULLIF(SUM(n.peso),0), 0) AS media
+FROM matriculas m
+JOIN alunos a ON a.id = m.aluno_id
+JOIN disciplinas d ON d.id = m.disciplina_id
+LEFT JOIN notas n ON n.matricula_id = m.id
+GROUP BY m.id, m.aluno_id, a.nome, m.disciplina_id, d.nome;
+
+
+-- Exemplos rápidos de SELECTs para inspeção de dados
+-- Observação: `nome_da_tabela` é um placeholder; substitua pelo nome real da tabela ao executar.
+SELECT * FROM nome_da_tabela; -- <-- substitua antes de usar
+SELECT * FROM alunos;       -- retorna todos os alunos
+SELECT * FROM disciplinas;  -- retorna todas as disciplinas
+SELECT * FROM matriculas;   -- retorna todas as matrículas
+SELECT * FROM notas;        -- retorna todas as notas
+
+-- Consulta: lista simples de matrículas com nome do aluno e nome da disciplina
+SELECT a.nome, d.nome AS disciplina, m.status, m.data_matricula
+FROM matriculas m
+JOIN alunos a ON m.aluno_id = a.id
+JOIN disciplinas d ON m.disciplina_id = d.id;
+
+-- Consulta: lista de notas com informações do aluno e da disciplina
+SELECT a.nome, d.nome AS disciplina, n.tipo, n.nota, n.peso, n.data_avaliacao
+FROM notas n
+JOIN matriculas m ON n.matricula_id = m.id
+JOIN alunos a ON m.aluno_id = a.id
+JOIN disciplinas d ON m.disciplina_id = d.id;
