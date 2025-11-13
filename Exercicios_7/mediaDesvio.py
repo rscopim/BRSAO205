@@ -1,3 +1,5 @@
+'''1 -  Crie um programa que lê um arquivo CSV de logs de treinamento com a biblioteca pandas, calcule e exiba a média e o desvio padrão da coluna tempo_execucao, caso e o arquivo não exista ou houver erro na leitura, mostre uma mensagem de erro. '''
+
 import pandas as pd
 
 print("=== Análise de Logs de Treinamento ===")
